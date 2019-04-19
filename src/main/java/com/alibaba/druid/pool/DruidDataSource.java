@@ -1785,6 +1785,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 eventListener.connectionErrorOccurred(event);
             }
 
+            //如果出现了致命的错误 那么直接将直接进行物理
             // exceptionSorter.isExceptionFatal
             if (exceptionSorter != null && exceptionSorter.isExceptionFatal(sqlEx)) {
                 handleFatalError(pooledConnection, sqlEx, sql);
@@ -1796,6 +1797,9 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         }
     }
 
+    /**
+     * 出现致命的错误
+     */
     protected final void handleFatalError(DruidPooledConnection conn, SQLException error, String sql) throws SQLException {
         final DruidConnectionHolder holder = conn.holder;
 
@@ -1901,6 +1905,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
         try {
             // check need to rollback?
+            //如果是手动commit 那么回滚事务 防止事务没有被提交
             if ((!isAutoCommit) && (!isReadOnly)) {
                 pooledConnection.rollback();
             }
@@ -1911,6 +1916,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 final ReentrantLock lock = pooledConnection.lock;
                 lock.lock();
                 try {
+                    //reset状态
                     holder.reset();
                 } finally {
                     lock.unlock();
@@ -1923,11 +1929,13 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 return;
             }
 
+            //如果配置了使用次数的限制 超过的话 那么直接将连接给丢弃了
             if (phyMaxUseCount > 0 && holder.useCount >= phyMaxUseCount) {
                 discardConnection(holder.conn);
                 return;
             }
 
+            //如果物理连接已经关闭了 那么将连接也关闭了 这个连接也不用回收了(回收即放入到connections中)
             if (physicalConnection.isClosed()) {
                 lock.lock();
                 try {

@@ -43,6 +43,7 @@ import java.util.Map;
 import com.alibaba.druid.proxy.jdbc.JdbcParameter.TYPE;
 
 /**
+ * PreparedStatement的代理对象 其中主要的工作就是在操作前或者后执行过滤链
  * @author wenshao [szujobs@hotmail.com]
  */
 public class PreparedStatementProxyImpl extends StatementProxyImpl implements PreparedStatementProxy {

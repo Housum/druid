@@ -191,6 +191,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile long                            commitCount                               = 0L;
     protected volatile long                            rollbackCount                             = 0L;
     protected volatile long                            cachedPreparedStatementHitCount           = 0L;
+    //统计prepareStatement的个数
     protected volatile long                            preparedStatementCount                    = 0L;
     protected volatile long                            closedPreparedStatementCount              = 0L;
     protected volatile long                            cachedPreparedStatementCount              = 0L;
@@ -1021,6 +1022,9 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         this.name = name;
     }
 
+    /**
+     * 是否缓存preparedStatement，也就是PSCache。PSCache对支持游标的数据库性能提升巨大，比如说oracle。在mysql下建议关闭
+     */
     public boolean isPoolPreparedStatements() {
         return poolPreparedStatements;
     }
@@ -1569,6 +1573,10 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         this.clearFiltersEnable = clearFiltersEnable;
     }
 
+    /**
+     * 一下是标记 connection statement  resultSet transaction metaData的
+     * 唯一标示符
+     */
     protected volatile long connectionIdSeed  = 10000L;
     protected volatile long statementIdSeed   = 20000L;
     protected volatile long resultSetIdSeed   = 50000L;
@@ -2082,6 +2090,9 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return asyncCloseConnectionEnable;
     }
 
+    /**
+     * 连接池中的连接是否可以通过异步关闭的方式
+     */
     public void setAsyncCloseConnectionEnable(boolean asyncCloseConnectionEnable) {
         this.asyncCloseConnectionEnable = asyncCloseConnectionEnable;
     }

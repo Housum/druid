@@ -4,3 +4,6 @@
 调用 connection_close @see com.alibaba.druid.proxy.jdbc.ConnectionProxyImpl.close
 3.数据源获取连接之前
 调用 dataSource_connect @see com.alibaba.druid.pool.DruidDataSource.getConnection(long)
+4.数据源回收之前
+调用dataSource_recycle @see com.alibaba.druid.pool.DruidPooledConnection.close
+

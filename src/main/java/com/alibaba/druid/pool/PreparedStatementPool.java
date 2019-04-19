@@ -30,12 +30,14 @@ import com.alibaba.druid.support.logging.LogFactory;
 import com.alibaba.druid.util.OracleUtils;
 
 /**
+ * prepareStatement池
  * @author wenshao [szujobs@hotmail.com]
  */
 public class PreparedStatementPool {
 
     private final static Log              LOG = LogFactory.getLog(PreparedStatementPool.class);
 
+    //LRU 存储PSCache
     private final LRUCache                map;
     private final DruidAbstractDataSource dataSource;
 
@@ -48,7 +50,12 @@ public class PreparedStatementPool {
         map = new LRUCache(initCapacity);
     }
 
-    public static enum MethodType {
+
+    /**
+     * prepareStatement的方法类型M1, M2, M3, M4, M5, M6为不同的重载方法
+     * Precall_1, Precall_2, Precall_3是存储过程
+     */
+    public enum MethodType {
         M1, M2, M3, M4, M5, M6, Precall_1, Precall_2, Precall_3
     }
 

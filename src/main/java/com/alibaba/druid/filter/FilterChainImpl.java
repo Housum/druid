@@ -67,6 +67,8 @@ import com.alibaba.druid.proxy.jdbc.StatementProxy;
 import com.alibaba.druid.proxy.jdbc.StatementProxyImpl;
 
 /**
+ * 代表了一个过滤链 是线程不安全的 即它封闭在线程内使用的
+ * 类主要的职责就是执行过滤链 在执行完过滤器之后 执行真正的物理操作
  * @author wenshao [szujobs@hotmail.com]
  */
 public class FilterChainImpl implements FilterChain {

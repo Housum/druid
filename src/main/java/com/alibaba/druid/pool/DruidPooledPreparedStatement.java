@@ -43,6 +43,8 @@ import com.alibaba.druid.support.logging.LogFactory;
 import com.alibaba.druid.util.OracleUtils;
 
 /**
+ * prepareStatement池化对象 如果配置了poolPreparedStatements 那么将会被缓存下来 会被重复使用(PSCache)
+ *
  * @author wenshao [szujobs@hotmail.com]
  */
 public class DruidPooledPreparedStatement extends DruidPooledStatement implements PreparedStatement {
@@ -75,6 +77,9 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
         pooled = conn.getConnectionHolder().isPoolPreparedStatements();
         // Remember the defaults
 
+        //如果是池话的对象 那么将默认的配置保存下来 已遍回收的时候 将配置都设置为默认的
+
+        //配置见:java.sql.Statement
         if (pooled) {
             try {
                 defaultMaxFieldSize = stmt.getMaxFieldSize();
@@ -171,6 +176,7 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
 
         boolean connectionClosed = this.conn.isClosed();
         // Reset the defaults
+        //如果使用PSCache 并且数据源没有关闭的话 那么将状态给初始化
         if (pooled && !connectionClosed) {
             try {
                 if (defaultMaxFieldSize != currentMaxFieldSize) {
@@ -217,11 +223,14 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
     public ResultSet executeQuery() throws SQLException {
         checkOpen();
 
+        //添加执行次数
         incrementExecuteQueryCount();
+        //将执行sql加入到记录中 最终这部分sql将会被加入到DruidDataSource中
         transactionRecord(sql);
 
         oracleSetRowPrefetch();
 
+        //执行前
         conn.beforeExecute();
         try {
             ResultSet rs = stmt.executeQuery();
@@ -230,7 +239,9 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
                 return null;
             }
 
+            //返回结果集
             DruidPooledResultSet poolableResultSet = new DruidPooledResultSet(this, rs);
+            //加入到记录中
             addResultSetTrace(poolableResultSet);
 
             return poolableResultSet;
@@ -239,6 +250,7 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
 
             throw checkException(t);
         } finally {
+            //执行后
             conn.afterExecute();
         }
     }

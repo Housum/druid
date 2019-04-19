@@ -275,6 +275,9 @@ public final class DruidConnectionHolder {
         keepAliveCheckCount++;
     }
 
+    /**
+     * 将配置设置为默认的
+     */
     public void reset() throws SQLException {
         // reset default settings
         if (underlyingReadOnly != defaultReadOnly) {

@@ -35,6 +35,9 @@ public final class PreparedStatementHolder {
 
     private boolean                   enterOracleImplicitCache = false;
 
+    /**
+     * 在使用的个数 TODO 能够被并发使用？校验的时候 没有被加锁 是否有并发问题
+     */
     private int                       inUseCount               = 0;
     private boolean                   pooling                  = false;
 

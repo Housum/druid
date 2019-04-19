@@ -51,13 +51,14 @@ import com.alibaba.druid.support.logging.LogFactory;
 
 /**
  * 被池话的连接 该连接与物理连接的不同在于 其方法是针对连接池的方法执行 比如
- * close 只是将其重新放入到了连接池中了 对外暴露的就是该类
+ * close 只是将其回收到到了连接池中了 连接池返回的就是该类
  * @author wenshao [szujobs@hotmail.com]
  */
 public class DruidPooledConnection extends PoolableWrapper implements javax.sql.PooledConnection, Connection {
     private final static Log                   LOG                  = LogFactory.getLog(DruidPooledConnection.class);
     public static final  int                   MAX_RECORD_SQL_COUNT = 10;
     protected            Connection            conn;
+    //内存储存了物理连接
     protected volatile   DruidConnectionHolder holder;
     protected            TransactionInfo       transactionInfo;
     private final        boolean               dupCloseLogEnable;
@@ -81,6 +82,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         this.lock = holder.lock;
         dupCloseLogEnable = holder.getDataSource().isDupCloseLogEnable();
         ownerThread = Thread.currentThread();
+        //连接时间
         connectedTimeMillis = System.currentTimeMillis();
     }
 
@@ -126,6 +128,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         return handleException(t, null);
     }
 
+    //出现错误
     public SQLException handleException(Throwable t, String sql) throws SQLException {
         final DruidConnectionHolder holder = this.holder;
 
@@ -146,6 +149,11 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         return holder.getDataSource().isOracle();
     }
 
+    /**
+     * 对池化的prepareStatement进行回收
+     * @param stmt
+     * @throws SQLException
+     */
     public void closePoolableStatement(DruidPooledPreparedStatement stmt) throws SQLException {
         PreparedStatement rawStatement = stmt.getRawPreparedStatement();
 
@@ -155,6 +163,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
 
         if (stmt.isPooled()) {
             try {
+                //调用native api 清理参数
                 rawStatement.clearParameters();
             } catch (SQLException ex) {
                 this.handleException(ex, null);
@@ -167,6 +176,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         }
 
         PreparedStatementHolder stmtHolder = stmt.getPreparedStatementHolder();
+        //减少使用数量
         stmtHolder.decrementInUseCount();
         if (stmt.isPooled() && holder.isPoolPreparedStatements() && stmt.exceptionCount == 0) {
             holder.getStatementPool().put(stmtHolder);
@@ -231,12 +241,18 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         return disable;
     }
 
+    /**
+     * 这里的关闭并非是正在的关闭 这里主要的做的还是回收连接 将连接放入到
+     * 连接池的connections中
+     */
     @Override
     public void close() throws SQLException {
+        //该连接不能在被调用(后面关闭之后将会设置为true)
         if (this.disable) {
             return;
         }
 
+        //检测是否重复关闭
         DruidConnectionHolder holder = this.holder;
         if (holder == null) {
             if (dupCloseLogEnable) {
@@ -247,16 +263,20 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
 
         DruidAbstractDataSource dataSource = holder.getDataSource();
         boolean isSameThread = this.getOwnerThread() == Thread.currentThread();
-        
+
+        //如果关闭该连接的不是持有它的线程 那么设置属性为
         if (!isSameThread) {
             dataSource.setAsyncCloseConnectionEnable(true);
         }
-        
+
+        //关闭
         if (dataSource.isAsyncCloseConnectionEnable()) {
+            //因为不是同一个线程的 所以和后面的代码唯一区别就是使用了lock(该lock也是DruidConnectionHolder的锁)
             syncClose();
             return;
         }
 
+        //通知监听事件
         for (ConnectionEventListener listener : holder.getConnectionEventListeners()) {
             listener.connectionClosed(new ConnectionEvent(this));
         }
@@ -264,9 +284,11 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         
         List<Filter> filters = dataSource.getProxyFilters();
         if (filters.size() > 0) {
+            //数据源回收连接  调用filter
             FilterChainImpl filterChain = new FilterChainImpl(dataSource);
             filterChain.dataSource_recycle(this);
         } else {
+            //回收
             recycle();
         }
 
@@ -308,8 +330,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     }
 
     /**
-     * 回收连接  底层的做法是将物理连接给回收了
-     * @throws SQLException
+     * 回收连接  底层的做法是将物理连接给回收到了连接池中
      */
     public void recycle() throws SQLException {
         if (this.disable) {
@@ -326,10 +347,11 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
 
         if (!this.abandoned) {
             DruidAbstractDataSource dataSource = holder.getDataSource();
-            //回收连接
+            //调用数据源的方法 将此连接回收
             dataSource.recycle(this);
         }
 
+        //将当前对象的所有属性情况 help GC,同时也是为了防止关闭之后其他线程还能够使用
         this.holder = null;
         conn = null;
         transactionInfo = null;
@@ -343,16 +365,23 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         checkState();
 
         PreparedStatementHolder stmtHolder = null;
+        //作为PSCache的key 底层重写了hashCode和equal方法
         PreparedStatementKey key = new PreparedStatementKey(sql, getCatalog(), MethodType.M1);
 
+        //返回是否配置了PSCache
         boolean poolPreparedStatements = holder.isPoolPreparedStatements();
 
+        //如果配置了的话 那么返回缓存中的PSCache
         if (poolPreparedStatements) {
+            //这里虽然没有加锁 但是是不会有并发问题的 因为DruidPooledConnection是线程内执行 不会散到其他的线程
+            //如果在一个连接中 命中了超过两次 那么将会新建一个连接 另外一个连接使用池中的对象
             stmtHolder = holder.getStatementPool().get(key);
         }
 
+        //如果缓存中不存在 生成prepareStatement
         if (stmtHolder == null) {
             try {
+                //conn.prepareStatement(sql)创建的是被代理过的prepareStatement
                 stmtHolder = new PreparedStatementHolder(key, conn.prepareStatement(sql));
                 holder.getDataSource().incrementPreparedStatementCount();
             } catch (SQLException ex) {
@@ -364,12 +393,14 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
 
         DruidPooledPreparedStatement rtnVal = new DruidPooledPreparedStatement(this, stmtHolder);
 
+        //保存执行的statement
         holder.addTrace(rtnVal);
 
         return rtnVal;
     }
 
     private void initStatement(PreparedStatementHolder stmtHolder) throws SQLException {
+        //使用次数加1
         stmtHolder.incrementInUseCount();
         holder.getDataSource().initStatement(this, stmtHolder.statement);
     }
@@ -636,7 +667,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         return rtnVal;
     }
 
-    // ////////////////////
+    // //////////////////// statement没有缓存能力 直接每次都创建新的对象
 
     @Override
     public Statement createStatement() throws SQLException {
@@ -1136,6 +1167,9 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         return disableError;
     }
 
+    /**
+     * 检查连接的状态
+     */
     public void checkState() throws SQLException {
         final boolean asyncCloseEnabled;
         if (holder != null) {
