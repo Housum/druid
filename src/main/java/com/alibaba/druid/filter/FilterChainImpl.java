@@ -145,6 +145,8 @@ public class FilterChainImpl implements FilterChain {
     }
 
     public ConnectionProxy connection_connect(Properties info) throws SQLException {
+
+        //这里是在创建连接前执行过滤链
         if (this.pos < filterSize) {
             return nextFilter()
                     .connection_connect(this, info);
@@ -153,12 +155,16 @@ public class FilterChainImpl implements FilterChain {
         Driver driver = dataSource.getRawDriver();
         String url = dataSource.getRawJdbcUrl();
 
+        //进行物理连接的创建
         Connection nativeConnection = driver.connect(url, info);
 
+        //如果连接返回了 直接返回null
         if (nativeConnection == null) {
             return null;
         }
 
+        //创建一个数据库的代理 在代理中就实现了正式的操作 比如在调用close的时候 并不是正在的关闭数据库连接 而是
+        //将连接给归还给数据库连接池
         return new ConnectionProxyImpl(dataSource, nativeConnection, info, dataSource.createConnectionId());
     }
 
@@ -176,6 +182,7 @@ public class FilterChainImpl implements FilterChain {
 
     @Override
     public void connection_close(ConnectionProxy connection) throws SQLException {
+
         if (this.pos < filterSize) {
             nextFilter()
                     .connection_close(this, connection);
@@ -4999,11 +5006,13 @@ public class FilterChainImpl implements FilterChain {
 
     @Override
     public DruidPooledConnection dataSource_connect(DruidDataSource dataSource, long maxWaitMillis) throws SQLException {
+
+        //调用过滤链的过滤器
         if (this.pos < filterSize) {
             DruidPooledConnection conn = nextFilter().dataSource_getConnection(this, dataSource, maxWaitMillis);
             return conn;
         }
-
+        //调用数据源获取连接
         return dataSource.getConnectionDirect(maxWaitMillis);
     }
 

@@ -40,6 +40,9 @@ import com.alibaba.druid.support.logging.Log;
 import com.alibaba.druid.support.logging.LogFactory;
 import com.alibaba.druid.util.Histogram;
 
+/**
+ * JDBC的监控对象
+ */
 public class JdbcDataSourceStat implements JdbcDataSourceStatMBean {
 
     private final static Log                                    LOG                     = LogFactory.getLog(JdbcDataSourceStat.class);

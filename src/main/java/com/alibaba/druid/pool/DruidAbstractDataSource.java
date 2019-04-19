@@ -118,6 +118,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile int                             maxActive                                 = DEFAULT_MAX_ACTIVE_SIZE;
     protected volatile int                             minIdle                                   = DEFAULT_MIN_IDLE;
     protected volatile int                             maxIdle                                   = DEFAULT_MAX_IDLE;
+    //获取连接的超时时间
     protected volatile long                            maxWait                                   = DEFAULT_MAX_WAIT;
     protected int                                      notFullTimeoutRetryCount                  = 0;
 
@@ -131,11 +132,13 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile int                             maxPoolPreparedStatementPerConnectionSize = 10;
 
     protected volatile boolean                         inited                                    = false;
+    //该属性表示的是是否在初始化失败的时候抛出异常
     protected volatile boolean                         initExceptionThrow                        = true;
 
     protected PrintWriter                              logWriter                                 = new PrintWriter(System.out);
 
     protected List<Filter>                             filters                                   = new CopyOnWriteArrayList<Filter>();
+    //是否可以清理 filters
     private boolean                                    clearFiltersEnable                        = true;
     protected volatile ExceptionSorter                 exceptionSorter                           = null;
 
@@ -239,6 +242,9 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected boolean                                  isMySql                                   = false;
     protected boolean                                  useOracleImplicitCache                    = true;
 
+    /**
+     * 该对象是操作连接的主要锁
+     */
     protected ReentrantLock                            lock;
     protected Condition                                notEmpty;
     protected Condition                                empty;
@@ -250,6 +256,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile int                             directCreateCount                         = 0;
     protected volatile long                            createCount                               = 0L;
     protected volatile long                            destroyCount                              = 0L;
+    //上一个创建连接的时间
     protected volatile long                            createStartNanos                          = 0L;
 
     final static AtomicIntegerFieldUpdater<DruidAbstractDataSource> createErrorCountUpdater      = AtomicIntegerFieldUpdater.newUpdater(DruidAbstractDataSource.class, "createErrorCount");
@@ -285,8 +292,10 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     protected volatile Throwable                       lastFatalError                            = null;
 
     public DruidAbstractDataSource(boolean lockFair){
-        lock = new ReentrantLock(lockFair);
 
+        //根据参数创建一个重入锁
+        lock = new ReentrantLock(lockFair);
+        //创建condition
         notEmpty = lock.newCondition();
         empty = lock.newCondition();
     }
@@ -341,11 +350,17 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return lock.isFair();
     }
 
+    /**
+     *
+     * @param useUnfairLock 该参数的意思是 是否使用非公平锁
+     */
     public void setUseUnfairLock(boolean useUnfairLock) {
+        //如果本身就是非公平锁 那么直接退出
         if (lock.isFair() == !useUnfairLock) {
             return;
         }
 
+        //设置公平性的要求是非初始化(init操作是在第一次获取连接的时候做的 @see com.alibaba.druid.pool.DruidDataSource.getConnection(long))
         if (!this.inited) {
             final ReentrantLock lock = this.lock;
             lock.lock();
@@ -1016,6 +1031,10 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         return maxWait;
     }
 
+    /**
+     * 设置该属性将导致使用公平锁
+     * @param maxWaitMillis
+     */
     public void setMaxWait(long maxWaitMillis) {
         if (maxWaitMillis == this.maxWait) {
             return;
@@ -1364,6 +1383,9 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         }
     }
 
+    /**
+     * 将filters给清理调
+     */
     public void clearFilters() {
         if (!isClearFiltersEnable()) {
             return;
@@ -1438,6 +1460,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
                 boolean valid = validConnectionChecker.isValidConnection(conn, validationQuery, validationQueryTimeout);
                 long currentTimeMillis = System.currentTimeMillis();
                 if (holder != null) {
+                    //记录上一次的检查时间
                     holder.lastValidTimeMillis = currentTimeMillis;
                 }
 
@@ -1445,8 +1468,8 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
                     long lastPacketReceivedTimeMs = MySqlUtils.getLastPacketReceivedTimeMs(conn);
                     if (lastPacketReceivedTimeMs > 0) {
                         long mysqlIdleMillis = currentTimeMillis - lastPacketReceivedTimeMs;
-                        if (lastPacketReceivedTimeMs > 0 //
-                                && mysqlIdleMillis >= timeBetweenEvictionRunsMillis) {
+                        //如果连接空闲时间大于等于minEvictableIdleTimeMillis则关闭物理连接
+                        if (mysqlIdleMillis >= timeBetweenEvictionRunsMillis) {
                             discardConnection(conn);
                             String errorMsg = "discard long time none received connection. "
                                     + ", jdbcUrl : " + jdbcUrl
@@ -1461,10 +1484,14 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
                 return valid;
             }
 
+            //validConnectionChecker不存在的路径
+
+            //如果连接已经关闭
             if (conn.isClosed()) {
                 return false;
             }
 
+            //如果不存在校验SQL
             if (null == validationQuery) {
                 return true;
             }
@@ -1472,11 +1499,14 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
             Statement stmt = null;
             ResultSet rset = null;
             try {
+                //执行SQL校验
                 stmt = conn.createStatement();
                 if (getValidationQueryTimeout() > 0) {
                     stmt.setQueryTimeout(validationQueryTimeout);
                 }
                 rset = stmt.executeQuery(validationQuery);
+
+                //如果没有返回任何的东西 肯定是有问题了 那么返回false 表示校验失败
                 if (!rset.next()) {
                     return false;
                 }
@@ -1593,16 +1623,23 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     public Connection createPhysicalConnection(String url, Properties info) throws SQLException {
         Connection conn;
         if (getProxyFilters().size() == 0) {
+            //如果没有配置过滤器 那么直接使用驱动进行连接连接
             conn = getDriver().connect(url, info);
         } else {
+            //如果存在过滤器的话 那么进行过滤 其中在FilterChainImpl中也进行了物理连接的创建
             conn = new FilterChainImpl(this).connection_connect(info);
         }
 
+        //创建的个数+1
         createCountUpdater.incrementAndGet(this);
-
         return conn;
     }
 
+    /**
+     * 创建一个物理连接 创建钱先执行一些callback方法
+     * @return
+     * @throws SQLException
+     */
     public PhysicalConnectionInfo createPhysicalConnection() throws SQLException {
         String url = this.getUrl();
         Properties connectProperties = getConnectProperties();
@@ -1631,6 +1668,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
             }
         }
 
+        //拷贝参数出来 防止并发修改参数
         Properties physicalConnectProperties = new Properties();
         if (connectProperties != null) {
             physicalConnectProperties.putAll(connectProperties);
@@ -1646,6 +1684,7 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
 
         Connection conn = null;
 
+        //开始连接的时间
         long connectStartNanos = System.nanoTime();
         long connectedNanos, initedNanos, validatedNanos;
 
@@ -1656,20 +1695,28 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
                 ? new HashMap<String, Object>()
                 : null;
 
+        //设置上一个创建连接的时间
         createStartNanosUpdater.set(this, connectStartNanos);
+        //目前正在创建连接的线程数
         creatingCountUpdater.incrementAndGet(this);
         try {
+            //开始创建连接 其中调用过滤链 并且进行创建物理连接(返回的是代理的ConnectionProxy,代理了物理连接的方法)
             conn = createPhysicalConnection(url, physicalConnectProperties);
+            //连接成功的时间
             connectedNanos = System.nanoTime();
 
             if (conn == null) {
                 throw new SQLException("connect error, url " + url + ", driverClass " + this.driverClass);
             }
 
+            //进行参数的设置
             initPhysicalConnection(conn, variables, globalVariables);
+            //初始化完成的时间
             initedNanos = System.nanoTime();
-
+            //validationQuery 检查
             validateConnection(conn);
+
+            //上一次检查的时间
             validatedNanos = System.nanoTime();
 
             setFailContinuous(false);
@@ -1755,27 +1802,35 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
     }
 
     public void initPhysicalConnection(Connection conn, Map<String, Object> variables, Map<String, Object> globalVariables) throws SQLException {
+
+        //设置auto-commit属性
         if (conn.getAutoCommit() != defaultAutoCommit) {
             conn.setAutoCommit(defaultAutoCommit);
         }
 
+        //设置read only属性
         if (defaultReadOnly != null) {
             if (conn.isReadOnly() != defaultReadOnly) {
                 conn.setReadOnly(defaultReadOnly);
             }
         }
 
+        //设置隔离级别
         if (getDefaultTransactionIsolation() != null) {
-            if (conn.getTransactionIsolation() != getDefaultTransactionIsolation().intValue()) {
+            if (conn.getTransactionIsolation() != getDefaultTransactionIsolation()) {
                 conn.setTransactionIsolation(getDefaultTransactionIsolation());
             }
         }
 
+        //设置catalog
         if (getDefaultCatalog() != null && getDefaultCatalog().length() != 0) {
             conn.setCatalog(getDefaultCatalog());
         }
 
+        //物理连接初始化的时候执行的sql
         Collection<String> initSqls = getConnectionInitSqls();
+
+        //如果这些配置都没有的话 那么就可以直接结束了
         if (initSqls.size() == 0
                 && variables == null
                 && globalVariables == null) {
@@ -1791,9 +1846,11 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
                     continue;
                 }
 
+                //执行初始化SQL
                 stmt.execute(sql);
             }
 
+            //如果是mysql的话 那么将session级别的参数和全局参数都获取出来
             if (JdbcConstants.MYSQL.equals(dbType)
                 ||JdbcConstants.ALIYUN_ADS.equals(dbType)) {
                 if (variables != null) {
@@ -2104,13 +2161,23 @@ public abstract class DruidAbstractDataSource extends WrapperAdapter implements 
         this.initExceptionThrow = initExceptionThrow;
     }
 
+
+    /**
+     * 代表一个物理连接 其中保存了session级别的参数和全局的参数以及连接的开始时间和连接上的时间
+     */
     public static class PhysicalConnectionInfo {
         private Connection connection;
+        //开始进行物理连接的时间
         private long connectStartNanos;
+        //物理连接成功的时间
         private long connectedNanos;
+        //初始化完成时间
         private long initedNanos;
+        //上次检查的时间
         private long validatedNanos;
+        //参数
         private Map<String, Object> vairiables;
+        //全局参数
         private Map<String, Object> globalVairiables;
 
         public PhysicalConnectionInfo(Connection connection //

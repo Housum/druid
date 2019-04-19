@@ -50,6 +50,8 @@ import com.alibaba.druid.support.logging.Log;
 import com.alibaba.druid.support.logging.LogFactory;
 
 /**
+ * 被池话的连接 该连接与物理连接的不同在于 其方法是针对连接池的方法执行 比如
+ * close 只是将其重新放入到了连接池中了 对外暴露的就是该类
  * @author wenshao [szujobs@hotmail.com]
  */
 public class DruidPooledConnection extends PoolableWrapper implements javax.sql.PooledConnection, Connection {
@@ -305,6 +307,10 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         }
     }
 
+    /**
+     * 回收连接  底层的做法是将物理连接给回收了
+     * @throws SQLException
+     */
     public void recycle() throws SQLException {
         if (this.disable) {
             return;
@@ -320,6 +326,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
 
         if (!this.abandoned) {
             DruidAbstractDataSource dataSource = holder.getDataSource();
+            //回收连接
             dataSource.recycle(this);
         }
 

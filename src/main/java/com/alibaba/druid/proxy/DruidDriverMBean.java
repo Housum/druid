@@ -16,6 +16,7 @@
 package com.alibaba.druid.proxy;
 
 /**
+ * JMX 监控DruidDriver
  * @author wenshao [szujobs@hotmail.com]
  */
 public interface DruidDriverMBean {

@@ -53,6 +53,7 @@ public class ConnectionProxyImpl extends WrapperProxyImpl implements ConnectionP
 
     private TransactionInfo       transactionInfo;
 
+    //统计关闭的次数
     private int                   closeCount;
 
     private FilterChainImpl       filterChain = null;

@@ -38,6 +38,8 @@ import com.alibaba.druid.util.JdbcUtils;
 import com.alibaba.druid.util.Utils;
 
 /**
+ * 连接的容器 其中保存了大部分相关的信息
+ * 状态信息 监听时间等等
  * @author wenshao [szujobs@hotmail.com]
  */
 public final class DruidConnectionHolder {

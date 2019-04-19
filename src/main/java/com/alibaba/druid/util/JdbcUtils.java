@@ -386,6 +386,12 @@ public final class JdbcUtils implements JdbcConstants {
         }
     }
 
+    /**
+     * 从jdbc url中获取到驱动的类名
+     * @param rawUrl
+     * @return
+     * @throws SQLException
+     */
     public static String getDriverClassName(String rawUrl) throws SQLException {
         if (rawUrl == null) {
             return null;

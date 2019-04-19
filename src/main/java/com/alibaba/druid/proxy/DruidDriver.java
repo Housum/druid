@@ -48,6 +48,7 @@ import com.alibaba.druid.util.JdbcUtils;
 import com.alibaba.druid.util.Utils;
 
 /**
+ * 为Druid的驱动 实现获取连接的操作
  * @author wenshao [szujobs@hotmail.com]
  */
 public class DruidDriver implements Driver, DruidDriverMBean {
@@ -61,7 +62,11 @@ public class DruidDriver implements Driver, DruidDriverMBean {
     private final static AtomicInteger                              sqlStatIdSeed            = new AtomicInteger(0);
 
     public final static String                                      DEFAULT_PREFIX           = "jdbc:wrap-jdbc:";
+
+    //start
+    //以下都是jdbc:wrap-jdbc:可以配置的属性
     public final static String                                      DRIVER_PREFIX            = "driver=";
+    //废弃了
     public final static String                                      PASSWORD_CALLBACK_PREFIX = "passwordCallback=";
     public final static String                                      NAME_PREFIX              = "name=";
     public final static String                                      JMX_PREFIX               = "jmx=";
@@ -110,7 +115,7 @@ public class DruidDriver implements Driver, DruidDriverMBean {
             if (LOG == null) {
                 LOG = LogFactory.getLog(DruidDriver.class);
             }
-            
+
             LOG.error("registerDriver error", e);
         }
 
@@ -162,7 +167,7 @@ public class DruidDriver implements Driver, DruidDriverMBean {
     /**
      * 参数定义： com.alibaba.druid.log.LogFilter=filter com.alibaba.druid.log.LogFilter.p1=prop-value
      * com.alibaba.druid.log.LogFilter.p2=prop-value
-     * 
+     *
      * @param url
      * @return
      * @throws SQLException

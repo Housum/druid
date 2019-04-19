@@ -1,0 +1,6 @@
+1.创建物理连接前执行
+调用connection_connect @see com.alibaba.druid.pool.DruidAbstractDataSource.createPhysicalConnection(java.lang.String, java.util.Properties)
+2.关闭连接的时候
+调用 connection_close @see com.alibaba.druid.proxy.jdbc.ConnectionProxyImpl.close
+3.数据源获取连接之前
+调用 dataSource_connect @see com.alibaba.druid.pool.DruidDataSource.getConnection(long)
