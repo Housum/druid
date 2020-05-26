@@ -107,9 +107,13 @@ public class ConfigFilter extends FilterAdapter {
 
     public void init(DataSourceProxy dataSourceProxy) {
         if (!(dataSourceProxy instanceof DruidDataSource)) {
-            LOG.error("ConfigLoader only support DruidDataSource");
-        }
+//            LOG.error("ConfigLoader only support DruidDataSource");
+            //fix
+            throw new IllegalStateException("ConfigLoader only support DruidDataSource");
 
+
+        }
+        //TODO ClassCastException
         DruidDataSource dataSource = (DruidDataSource) dataSourceProxy;
         Properties connectionProperties = dataSource.getConnectProperties();
 
